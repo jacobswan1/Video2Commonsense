@@ -177,7 +177,8 @@ def parse_opt():
 
     parser.add_argument(
         '--cuda',
-        action='store_true',
+        type=bool,
+        default=True,
         help='Use CUDA for training.')
 
     parser.add_argument(

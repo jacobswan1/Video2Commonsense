@@ -43,7 +43,7 @@ def test(loader, model, opt, cap_vocab, cms_vocab):
                 cms_list = raw_data[iterate_id][3]
 
             if opt['cuda']:
-                cms_list = cms_list.cuda()
+                # cms_list = cms_list.cuda()
                 cap_labels = cap_labels.cuda()
                 fc_feats = fc_feats.cuda()
 
