@@ -52,6 +52,8 @@ NOTE: By using more advanced video features, *e.g.*, I3D or S3D can yield obviou
 </p>
 
 ## Training and Testing
+Enviroment: This implementation was complemented on PyTorch-1.1.0, there was reported some errors if newer version PyToch is usednad  we will work on a updation for that later.
+
 Before the training on V2C-completion task, organize the working directory as follows using previous features/annotations:
 
     Video2CommonsenseBaseline
