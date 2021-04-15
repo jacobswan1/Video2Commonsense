@@ -1,9 +1,11 @@
 ''' Define the Transformer model '''
+import numpy as np
 from utils.utils import *
 from model.Decoder import Decoder
-from model.EncoderRNN import EncoderRNN
+from model.transformer.Layers import EncoderLayer
 
-__author__ = 'Jacob Zhiyuan Fang'
+__author__ = 'Yu-Hsiang Huang'
+__AugmentedBy__ = 'Jacob Zhiyuan Fang'
 
 
 class Model(nn.Module):
@@ -18,8 +20,7 @@ class Model(nn.Module):
         super().__init__()
 
         # set RNN layers at 1 or 2 yield better performance.
-        self.encoder = EncoderRNN(vis_emb, d_model, n_layers=rnn_layers,
-                                  bidirectional=0)
+        self.vis_emb = nn.Linear(vis_emb, d_model)
 
         self.decoder = Decoder(
             n_tgt_vocab=n_cap_vocab, len_max_seq=cap_max_seq,
@@ -52,11 +53,10 @@ class Model(nn.Module):
             self.x_logit_scale = 1.
 
     def forward(self, vis_feat, tgt_seq, tgt_pos, cms_seq, cms_pos):
-
+        enc_output = self.vis_emb(vis_feat)
         tgt_seq, tgt_pos = tgt_seq[:, :-1], tgt_pos[:, :-1]
         cms_seq, cms_pos = cms_seq[:, :-1], cms_pos[:, :-1]
 
-        enc_output, *_ = self.encoder(vis_feat)
         dec_output, *_ = self.decoder(tgt_seq, tgt_pos, vis_feat, enc_output)
         seq_logit = self.cap_word_prj(dec_output) * self.x_logit_scale
 

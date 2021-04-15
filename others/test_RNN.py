@@ -15,8 +15,6 @@ from model.transformer.Constants import *
 from utils.gt_caps_dataloader import VideoDataset
 from model.transformer.cap2cms_Translator import translate_batch
 
-# sys.path.append("./pycocoevalcap/")
-
 
 def test(loader, model, opt, cap_vocab, cms_vocab):
     res = {}
@@ -55,17 +53,19 @@ def test(loader, model, opt, cap_vocab, cms_vocab):
 
                 # Note, currently we used BEAM search to decode the captions, while greedy strategy
                 #  should yield close or even better results.
-                cms_batch_hyp = translate_batch(model, fc_feats, cap_labels, opt)
+                # cms_batch_hyp = translate_batch(model, fc_feats, cap_labels, opt)
+                _, _, _, cms_batch_hyp  = model(fc_feats, target_variable=cap_labels, cms_target_variable=None,
+                                                mode='test')
 
             for random_id in range(cap_labels.shape[0]):
                 # Print out the predicted sentences and GT
-                if EOS in cms_batch_hyp[random_id][0]:
-                    stop_id = cms_batch_hyp[random_id][0].index(EOS)
+                if EOS in cms_batch_hyp[random_id]:
+                    stop_id = list(cms_batch_hyp[random_id]).index(EOS)
                 else:
                     stop_id = -1
 
-                cms = list_to_sentence([cms_vocab[str(widx)] for widx in
-                                        cms_batch_hyp[random_id][0][: stop_id] if widx != 0])
+                cms = list_to_sentence([cms_vocab[str(widx.detach().cpu().numpy())] for widx in
+                                        cms_batch_hyp[random_id][: stop_id] if widx != 0])
                 cap_gt = list_to_sentence([cap_vocab[str(word.cpu().numpy())] for word in
                                            cap_labels[random_id, 1:] if word != 0][0:-1])
 
@@ -82,10 +82,6 @@ def test(loader, model, opt, cap_vocab, cms_vocab):
 
                 eval_id += 1
 
-                # Note! It is controversial whether PPL score reflect the quality of CMS as its using the corpus token
-                # probability. It is unclear which corpus (either total CMS corpus or the only 5 GT CMS, which is narrow)
-                # best reflects the results. Thus we remove it from our official results. Score in here is just for
-                # comparisons, where we used the only 5 GT annotations as corpus base.
                 ppl_corpus = ''
                 for c in cmses:
                     total_cms.add(c.lower())
@@ -118,39 +114,30 @@ def main(opt):
     else:
         cms_text_length = opt['att_max_len']
 
-    model = Model(
-        dataset.get_cap_vocab_size(),
-        dataset.get_cms_vocab_size(),
-        cap_max_seq=opt['cap_max_len'],
-        cms_max_seq=cms_text_length,
-        tgt_emb_prj_weight_sharing=True,
-        vis_emb=opt['dim_vis_feat'],
-        rnn_layers=opt['rnn_layer'],
-        d_k=opt['dim_head'],
-        d_v=opt['dim_head'],
-        d_model=opt['dim_model'],
-        d_word_vec=opt['dim_word'],
-        d_inner=opt['dim_inner'],
-        n_layers=opt['num_layer'],
-        n_head=opt['num_head'],
-        dropout=opt['dropout'])
+    from model.S2VTModel import S2VTModel
+    model = S2VTModel(dataset.get_cap_vocab_size(),
+                      dataset.get_cms_vocab_size(),
+                      opt['cap_max_len'],
+                      cms_text_length,
+                      opt["dim_model"],
+                      opt["dim_word"],
+                      opt['dim_vis_feat'],
+                      n_layers=opt['rnn_layer'])
+
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    params = sum([np.prod(p.size()) for p in model_parameters])
+    print(params)
 
     if len(opt['load_checkpoint']) != 0:
         state_dict = torch.load(opt['load_checkpoint'])
-        # for name, param in model.state_dict().items():
-        #     print(name, param.size())
-        #
-        # print('=================')
-        # print(state_dict.keys())
         model.load_state_dict(state_dict)
 
     if opt['cuda']:
         model = model.cuda()
 
+
     model.eval()
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    print(params)
+
     test(dataloader, model, opt, dataset.get_cap_vocab(), dataset.get_cms_vocab())
 
 

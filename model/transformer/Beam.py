@@ -6,7 +6,7 @@
 """
 
 import torch
-import model.transformer.Constants as Constants
+from ..transformer import Constants as Constants
 # import Constants as Constants
 
 

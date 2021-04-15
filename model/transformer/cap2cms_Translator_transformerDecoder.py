@@ -19,7 +19,7 @@ def pos_emb_generation(word_labels):
     return tgt_pos*binary_mask
 
 
-def translate_batch(model, src_emb, opt):
+def translate_batch(model, src_emb, cap_label, opt):
     ''' Translation work in one batch '''
 
     def get_inst_idx_to_tensor_position_map(inst_idx_list):
@@ -68,17 +68,13 @@ def translate_batch(model, src_emb, opt):
 
         def predict_word(dec_seq, dec_pos, src_seq, enc_output, n_active_inst, n_bm):
             if mode == 'cap':
-                dec_output, dec_slf_attn_list, dec_enc_attn_list = model.decoder\
-                    (dec_seq, dec_pos, src_seq, enc_output, return_attns=True)
-                # print(dec_enc_attn_list[-1][0])
+                dec_output, *_ = model.decoder(dec_seq, dec_pos, src_seq, enc_output)
                 dec_output = dec_output[:, -1, :]  # Pick the last step: (bh * bm) * d_h
                 word_prob = F.log_softmax(model.cap_word_prj(dec_output), dim=1)
                 word_prob = word_prob.view(n_active_inst, n_bm, -1)
 
             elif mode == 'int':
-                dec_output, dec_slf_attn_list, dec_enc_attn_list = model.cms_decoder\
-                    (dec_seq, dec_pos, src_seq, enc_output, return_attns=True)
-                # print(dec_enc_attn_list[-1][0])
+                dec_output, *_ = model.cms_decoder(dec_seq, dec_pos, src_seq, enc_output)
                 dec_output = dec_output[:, -1, :]  # Pick the last step: (bh * bm) * d_h
                 word_prob = F.log_softmax(model.cms_word_prj(dec_output), dim=1)
                 word_prob = word_prob.view(n_active_inst, n_bm, -1)
@@ -115,16 +111,26 @@ def translate_batch(model, src_emb, opt):
         return all_hyp, all_scores
 
     with torch.no_grad():
-        # Encode
+        # <--------------------------------------------- Decode Video ------------------------------------------------->
         src_seq = src_emb.cuda()
-        src_enc, *_ = model.encoder(src_seq)
-        video_encoding = src_enc
+        video_encoding = model.vis_emb(src_seq)
 
-        # Repeat data for beam search
-        n_bm = 1
-        n_inst, len_s, d_h = src_enc.size()
-        src_enc = src_enc.repeat(1, n_bm, 1).view(n_inst * n_bm, len_s, d_h)
-        src_seq = src_seq.repeat(1, n_bm, 1).view(n_inst * n_bm, len_s, -1)
+        # <--------------------------------------------- Decode CAP --------------------------------------------------->
+        cap_pos = pos_emb_generation(cap_label)
+        cap_label, cap_pos = cap_label[:, :-1], cap_pos[:, :-1]
+
+        cap_dec_output, *_ = model.decoder(cap_label, cap_pos, video_encoding, video_encoding)
+
+        # Concatenate visual and caption encoding
+        cat_encoding = torch.cat((video_encoding, cap_dec_output), 1)
+        # cat_encoding = cap_dec_output
+
+        # <--------------------------------------------- Decode CMS --------------------------------------------------->
+        # Repeat data for beam search for CMS
+        n_bm = 2
+        n_inst, len_s, d_h = cat_encoding.size()
+        src_enc = cat_encoding.repeat(1, n_bm, 1).view(n_inst * n_bm, len_s, d_h)
+        src_seq = cat_encoding.repeat(1, n_bm, 1).view(n_inst * n_bm, len_s, -1)
 
         # Prepare beams
         inst_dec_beams = [Beam(n_bm, device='cuda') for _ in range(n_inst)]
@@ -133,11 +139,10 @@ def translate_batch(model, src_emb, opt):
         active_inst_idx_list = list(range(n_inst))
         inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
 
-        # <---------------------------------------------Decode CAP ---------------------------------------------------->
-        for len_dec_seq in range(1, 28 + 1):
+        for len_dec_seq in range(1, opt['eff_max_len'] - 1):
 
             active_inst_idx_list = beam_decode_step(
-                inst_dec_beams, len_dec_seq, src_seq, src_enc, inst_idx_to_position_map, n_bm, mode='cap')
+                inst_dec_beams, len_dec_seq, src_seq, src_enc, inst_idx_to_position_map, n_bm, mode='int')
 
             if not active_inst_idx_list:
                 break  # all instances have finished their path to <EOS>
@@ -145,49 +150,9 @@ def translate_batch(model, src_emb, opt):
             src_seq, src_enc, inst_idx_to_position_map = collate_active_info(
                 src_seq, src_enc, inst_idx_to_position_map, active_inst_idx_list)
 
-        batch_hyp, batch_scores = collect_hypothesis_and_scores(inst_dec_beams, n_bm)
+        cms_batch_hyp, cms_batch_scores = collect_hypothesis_and_scores(inst_dec_beams, 1)
 
-        # <---------------------------------------------Decode CMS ---------------------------------------------------->
-        cms_batch_hyp = []
-        for cap_idx in range(n_bm):
-            [_[0].insert(0, 2) for _ in batch_hyp]  # Start with <BOS> symbol
-            dec_seq = np.zeros((opt['batch_size'], opt['cap_max_len']))
-            for idx, seq in enumerate(batch_hyp):
-                dec_seq[idx, :len(seq[cap_idx])] = seq[cap_idx]
-            dec_seq = torch.as_tensor(dec_seq).cuda().long()
-            dec_pos = pos_emb_generation(dec_seq).long()
-            dec_output_, *_ = model.decoder(dec_seq[:, :-1], dec_pos[:, :-1], src_emb.cuda(), video_encoding)
-
-            # Concatenate visual-captioning encodings
-            cat_encoding = torch.cat((video_encoding, dec_output_), 1)
-
-            # Repeat data for beam search for CMS
-            n_inst, len_s, d_h = cat_encoding.size()
-            src_enc = cat_encoding.repeat(1, n_bm, 1).view(n_inst * n_bm, len_s, d_h)
-            src_seq = cat_encoding.repeat(1, n_bm, 1).view(n_inst * n_bm, len_s, -1)
-
-            # Prepare beams
-            inst_dec_beams = [Beam(n_bm, device='cuda') for _ in range(n_inst)]
-
-            # Bookkeeping for active or not
-            active_inst_idx_list = list(range(n_inst))
-            inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
-
-            for len_dec_seq in range(1, opt['eff_max_len'] - 1):
-
-                active_inst_idx_list = beam_decode_step(
-                    inst_dec_beams, len_dec_seq, src_seq, src_enc, inst_idx_to_position_map, n_bm, mode='int')
-
-                if not active_inst_idx_list:
-                    break  # all instances have finished their path to <EOS>
-
-                src_seq, src_enc, inst_idx_to_position_map = collate_active_info(
-                    src_seq, src_enc, inst_idx_to_position_map, active_inst_idx_list)
-
-            cms_hyp, cms_batch_scores = collect_hypothesis_and_scores(inst_dec_beams, 3)
-            cms_batch_hyp.append(cms_hyp)
-    # only return the top-1 cms beam searched result
-    return batch_hyp, cms_batch_hyp[0]
+    return cms_batch_hyp
 
 
 

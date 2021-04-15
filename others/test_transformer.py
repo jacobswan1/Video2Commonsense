@@ -9,11 +9,11 @@ from pycocoevalcap.bleu.bleu import Bleu
 from pycocoevalcap.rouge.rouge import Rouge
 from pycocoevalcap.cider.cider import Cider
 from pycocoevalcap.meteor.meteor import Meteor
-from model.Model import Model
+from model.TransformerModel import Model
 from torch.utils.data import DataLoader
 from model.transformer.Constants import *
 from utils.gt_caps_dataloader import VideoDataset
-from model.transformer.cap2cms_Translator import translate_batch
+from model.transformer.cap2cms_Translator_transformer import translate_batch
 
 # sys.path.append("./pycocoevalcap/")
 
@@ -82,10 +82,7 @@ def test(loader, model, opt, cap_vocab, cms_vocab):
 
                 eval_id += 1
 
-                # Note! It is controversial whether PPL score reflect the quality of CMS as its using the corpus token
-                # probability. It is unclear which corpus (either total CMS corpus or the only 5 GT CMS, which is narrow)
-                # best reflects the results. Thus we remove it from our official results. Score in here is just for
-                # comparisons, where we used the only 5 GT annotations as corpus base.
+
                 ppl_corpus = ''
                 for c in cmses:
                     total_cms.add(c.lower())

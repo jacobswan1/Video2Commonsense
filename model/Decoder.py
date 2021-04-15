@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
-import model.transformer.Constants as Constants
-from model.transformer.Layers import DecoderLayer
+from .transformer import Constants as Constants
+from .transformer.Layers import DecoderLayer
 
 
 def get_non_pad_mask(seq):

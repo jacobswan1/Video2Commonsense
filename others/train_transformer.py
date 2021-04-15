@@ -7,7 +7,7 @@ import numpy as np
 from opts import *
 from utils.utils import *
 import torch.optim as optim
-from model.Model import Model
+from model.TransformerModel import Model
 from torch.utils.data import DataLoader
 from utils.dataloader import VideoDataset
 from model.transformer.Optim import ScheduledOptim
@@ -89,7 +89,8 @@ def train(loader, model, optimizer, opt, cap_vocab, cms_vocab):
                     print(' \n')
 
                     with open(opt['info_path'], 'a') as f:
-                        f.write('model_%d, cap_loss: %.6f, cms_loss: %.6f\n'% (epoch, cap_train_loss, cms_train_loss))
+                        f.write('model_%d, cap_loss: %.6f, cms_loss: %.6f\n'
+                                % (epoch, cap_train_loss, cms_train_loss))
                         f.write('\n %s \n %s' % (cap_pr, cap_gt))
                         f.write('\n %s \n %s' % (cms_pr, cms_gt))
                         f.write('\n')
@@ -98,8 +99,8 @@ def train(loader, model, optimizer, opt, cap_vocab, cms_vocab):
 
             # save the checkpoint
             model_path = os.path.join(opt['output_dir'],
-                                      'CMS_CAP_MODEL_INT_lr_{}_BS_{}_Layer_{}_ATTHEAD_{}_HID_{}_RNNLayer_{}_epoch_{}.pth'
-                                      .format(opt['init_lr'], opt['batch_size'], opt['num_layer'],
+                                      'Transformer_CMS_CAP_MODEL_{}_lr_{}_BS_{}_Layer_{}_ATTHEAD_{}_HID_{}_RNNLayer_{}_epoch_{}.pth'
+                                      .format(opt['cms'], opt['init_lr'], opt['batch_size'], opt['num_layer'],
                                               opt['num_head'], opt['dim_model'], opt['rnn_layer'], epoch))
 
             torch.save(model.state_dict(), model_path)
@@ -166,8 +167,8 @@ def main(opt):
     opt['init_lr'] = round(optimizer.init_lr, 3)
 
     # create checkpoint output directory
-    dir = os.path.join(opt['checkpoint_path'], 'CMS_CAP_MODEL_INT_lr_{}_BS_{}_Layer_{}_ATTHEAD_{}_HID_{}_RNNLayer_{}'
-                       .format(opt['init_lr'], opt['batch_size'], opt['num_layer'],
+    dir = os.path.join(opt['checkpoint_path'], 'CMS_CAP_MODEL_{}_lr_{}_BS_{}_Layer_{}_ATTHEAD_{}_HID_{}_RNNLayer_{}'
+                       .format(opt['cms'], opt['init_lr'], opt['batch_size'], opt['num_layer'],
                                opt['num_head'], opt['dim_model'], opt['rnn_layer']))
 
     if not os.path.exists(dir): os.makedirs(dir)

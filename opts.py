@@ -103,7 +103,7 @@ def parse_opt():
     parser.add_argument(
         '--rnn_layer',
         type=int,
-        default=2,
+        default=1,
         help='Numbers of layers in Video Encoder, RNN.')
 
     parser.add_argument(
@@ -122,7 +122,7 @@ def parse_opt():
     parser.add_argument(
         '--epochs',
         type=int,
-        default=600,
+        default=100,
         help='number of epochs')
 
     parser.add_argument(
@@ -158,9 +158,7 @@ def parse_opt():
     parser.add_argument(
         '--load_checkpoint',
         type=str,
-        default='save/CMS_CAP_MODEL_INT_lr_0.044_BS_128_Layer_6_ATTHEAD_8_HID_512_RNNLayer_2/CMS_CAP_MODEL_INT_lr_0.044_BS_128_Layer_6_ATTHEAD_8_HID_512_RNNLayer_2_epoch_100.pth',
-        # default='./save/model_cap-int.pth',
-        # default='./save/model3_cap-int-finetune_90.pth',
+        default='',
         help='directory to load check pointed models')
 
     parser.add_argument(
@@ -188,7 +186,7 @@ def parse_opt():
     parser.add_argument(
         '--cms',
         choices=['int', 'eff', 'att'],
-        default='int',
+        default='eff',
         help='Type of Commonsense Knowledge.')
 
     args = parser.parse_args()

@@ -5,7 +5,6 @@ class EncoderRNN(nn.Module):
     def __init__(self, dim_vid, dim_hidden, input_dropout_p=0.2, rnn_dropout_p=0.5,
                  n_layers=1, bidirectional=False, rnn_cell='gru'):
         """
-
         Args:
             hidden_dim (int): dim of hidden state of rnn
             input_dropout_p (int): dropout probability for the input sequence
@@ -57,4 +56,3 @@ class EncoderRNN(nn.Module):
         state1 = None
         output, hidden = self.rnn(vid_feats, state1)
         return output, hidden
-
